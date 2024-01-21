@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { LuciaError } from "lucia";
 import { ctx } from "../context";
+import { redirect } from "../lib";
 
 class DuplicateEmailError extends Error {
   constructor() {
@@ -31,6 +32,7 @@ export const authController = new Elysia({
             },
           })
           .catch((err) => {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             if (err.code === "SQLITE_CONSTRAINT") {
               throw new DuplicateEmailError();
             } else {
@@ -68,7 +70,6 @@ export const authController = new Elysia({
         }), // Enum to validate action type
       }),
       error({ code, error, set, log }) {
-
         log.error(error);
 
         let errorMessage = "";
@@ -93,13 +94,19 @@ export const authController = new Elysia({
       },
     },
   )
-  .post("/signout", async (ctx) => {
+  .get("/signout", async (ctx) => {
     const authRequest = ctx.auth.handleRequest(ctx);
     const session = await authRequest.validate();
 
     if (!session) {
-      ctx.set.status = "Unauthorized";
-      return "You are not logged in";
+      redirect(
+        {
+          set: ctx.set,
+          headers: ctx.headers,
+        },
+        "/",
+      );
+      return;
     }
 
     await ctx.auth.invalidateSession(session.sessionId);
@@ -107,5 +114,11 @@ export const authController = new Elysia({
     const sessionCookie = ctx.auth.createSessionCookie(null);
 
     ctx.set.headers["Set-Cookie"] = sessionCookie.serialize();
-    ctx.set.headers["HX-Location"] = "/";
+    redirect(
+      {
+        set: ctx.set,
+        headers: ctx.headers,
+      },
+      "/",
+    );
   });

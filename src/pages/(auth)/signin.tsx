@@ -111,57 +111,54 @@ export const login = new Elysia()
     set.headers["Set-Cookie"] = stateCookie;
     set.redirect = url.toString();
   })
-  .get(
-    "/login/github/callback",
-    async ({ request, log, path, query, set, auth }) => {
-      const { code, state } = query;
+  .get("/login/github/callback", async ({ request, log, query, set, auth }) => {
+    const { code, state } = query;
 
-      const cookies = parseCookie(request.headers.get("Cookie") ?? "");
-      const storedState = cookies.github_oauth_state;
+    const cookies = parseCookie(request.headers.get("Cookie") ?? "");
+    const storedState = cookies.github_oauth_state;
 
-      if (!storedState || !state || storedState !== state || !code) {
-        set.status = 400;
-        return "Invalid state";
-      }
+    if (!storedState || !state || storedState !== state || !code) {
+      set.status = 400;
+      return "Invalid state";
+    }
 
-      try {
-        const { getExistingUser, githubUser, createUser } =
-          await githubAuth.validateCallback(code);
+    try {
+      const { getExistingUser, githubUser, createUser } =
+        await githubAuth.validateCallback(code);
 
-        const getUser = async () => {
-          const existingUser = await getExistingUser();
-          if (existingUser) return existingUser;
-          const user = await createUser({
-            attributes: {
-              handle: githubUser.login,
-            },
-          });
-          return user;
-        };
-
-        const user = await getUser();
-        const session = await auth.createSession({
-          userId: user.userId,
-          attributes: {},
-        });
-        const sessionCookie = auth.createSessionCookie(session);
-        // redirect to profile page
-        return new Response(null, {
-          headers: {
-            Location: "/",
-            "Set-Cookie": sessionCookie.serialize(), // store session cookie
+      const getUser = async () => {
+        const existingUser = await getExistingUser();
+        if (existingUser) return existingUser;
+        const user = await createUser({
+          attributes: {
+            handle: githubUser.login,
           },
-          status: 302,
         });
-      } catch (e) {
-        if (e instanceof OAuthRequestError) {
-          // invalid code
-          set.status = 400;
-          return e.message;
-        }
-        set.status = 500;
-        log.error(e);
-        return "Internal server error";
+        return user;
+      };
+
+      const user = await getUser();
+      const session = await auth.createSession({
+        userId: user.userId,
+        attributes: {},
+      });
+      const sessionCookie = auth.createSessionCookie(session);
+      // redirect to profile page
+      return new Response(null, {
+        headers: {
+          Location: "/",
+          "Set-Cookie": sessionCookie.serialize(), // store session cookie
+        },
+        status: 302,
+      });
+    } catch (e) {
+      if (e instanceof OAuthRequestError) {
+        // invalid code
+        set.status = 400;
+        return e.message;
       }
-    },
-  );
+      set.status = 500;
+      log.error(e);
+      return "Internal server error";
+    }
+  });
